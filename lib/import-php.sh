@@ -181,8 +181,23 @@ while ($mysqli->more_results() && $mysqli->next_result()) { $mysqli->use_result(
 if ($useLocal === '1' || $useLocal === 'true') {
     // LOAD DATA LOCAL INFILE
     $csvEsc = str_replace("'", "\\'", $csv);
-    $columnsList = implode(', ', array_map(function($c){ return "`$c`"; }, $cols));
-    $loadSQL = "LOAD DATA LOCAL INFILE '{$csvEsc}' INTO TABLE `{$table}` CHARACTER SET utf8mb4 FIELDS TERMINATED BY '" . addslashes($delim) . "' ENCLOSED BY '" . addslashes($enc) . "' LINES TERMINATED BY '" . addslashes($lineTerm) . "' IGNORE 1 ROWS ({$columnsList});";
+
+    // Build SET clause to convert empty strings to NULL for columns with overrides
+    $setStatements = [];
+    foreach ($cols as $c) {
+        if (isset($overrides[$c]) && $overrides[$c] !== '') {
+            // Column has an override - convert empty to NULL
+            $setStatements[] = "`$c` = NULLIF(@`$c`, '')";
+        } else {
+            // No override - keep as is
+            $setStatements[] = "`$c` = @`$c`";
+        }
+    }
+
+    $varList = implode(', ', array_map(function($c){ return "@`$c`"; }, $cols));
+    $setClause = implode(', ', $setStatements);
+
+    $loadSQL = "LOAD DATA LOCAL INFILE '{$csvEsc}' INTO TABLE `{$table}` CHARACTER SET utf8mb4 FIELDS TERMINATED BY '" . addslashes($delim) . "' ENCLOSED BY '" . addslashes($enc) . "' LINES TERMINATED BY '" . addslashes($lineTerm) . "' IGNORE 1 ROWS ({$varList}) SET {$setClause};";
 
     if (!$mysqli->query($loadSQL)) {
         fwrite(STDERR, "LOAD DATA failed: " . $mysqli->error . "\n");
@@ -196,13 +211,20 @@ if ($useLocal === '1' || $useLocal === 'true') {
     $rowCount = 0;
     while (($data = fgetcsv($handle, 0, $delim, $enc, $escape)) !== false) {
         $vals = [];
-        foreach ($data as $v) {
-            $v = $mysqli->real_escape_string($v);
-            $vals[] = "'" . $v . "'";
+        for ($i = 0; $i < count($cols); $i++) {
+            $v = isset($data[$i]) ? $data[$i] : '';
+
+            // Check if column has override and value is empty
+            if (isset($overrides[$cols[$i]]) && $overrides[$cols[$i]] !== '' && $v === '') {
+                $vals[] = "NULL";
+            } else {
+                $v = $mysqli->real_escape_string($v);
+                $vals[] = "'" . $v . "'";
+            }
         }
         // Pad with NULLs if needed
         if (count($vals) < count($cols)) {
-            $vals = array_merge($vals, array_fill(0, count($cols) - count($vals), "''"));
+            $vals = array_merge($vals, array_fill(0, count($cols) - count($vals), "NULL"));
         }
         $rows[] = '(' . implode(',', $vals) . ')';
         $rowCount++;

@@ -97,11 +97,37 @@ create_import_table() {
 load_csv_data() {
     local table_name="$1"
     local csv_file="$2"
-    local column_list="$3"
+    shift 2
+    local columns=("$@")
 
     log_debug " --> Loading data into: $table_name"
 
-    local load_sql="LOAD DATA LOCAL INFILE '${csv_file}' INTO TABLE \`${table_name}\` CHARACTER SET utf8mb4 FIELDS TERMINATED BY '${CSV_DELIMITER}' ENCLOSED BY '${CSV_ENCLOSURE}' LINES TERMINATED BY '${CSV_LINE_TERMINATOR}' IGNORE 1 ROWS (${column_list});"
+    # Build variable list and SET clause for NULLIF handling
+    local var_list=()
+    local set_statements=()
+
+    for col in "${columns[@]}"; do
+        var_list+=("@\`${col}\`")
+
+        # Check if column has override
+        local override_type=""
+        if [[ "${NO_OVERRIDES}" != "true" ]]; then
+            override_type=$(get_column_override "$table_name" "$col" 2>/dev/null || true)
+        fi
+
+        if [[ -n "$override_type" ]]; then
+            # Column has override - convert empty to NULL
+            set_statements+=("\`${col}\` = NULLIF(@\`${col}\`, '')")
+        else
+            # No override - keep as is
+            set_statements+=("\`${col}\` = @\`${col}\`")
+        fi
+    done
+
+    local var_list_str=$(IFS=','; echo "${var_list[*]}")
+    local set_clause=$(IFS=','; echo "${set_statements[*]}")
+
+    local load_sql="LOAD DATA LOCAL INFILE '${csv_file}' INTO TABLE \`${table_name}\` CHARACTER SET utf8mb4 FIELDS TERMINATED BY '${CSV_DELIMITER}' ENCLOSED BY '${CSV_ENCLOSURE}' LINES TERMINATED BY '${CSV_LINE_TERMINATOR}' IGNORE 1 ROWS (${var_list_str}) SET ${set_clause};"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info " --> [DRY RUN] Would load data from: $(basename "$csv_file")"
@@ -168,7 +194,7 @@ import_csv_mysql() {
         fi
 
         # Load data
-        if load_csv_data "$table_name" "$csv_file" "$PARSED_COLUMN_LIST"; then
+        if load_csv_data "$table_name" "$csv_file" "${PARSED_COLUMNS[@]}"; then
             ((imported_count++))
             log_info " --> Imported: $csv_basename -> $table_name"
         else
