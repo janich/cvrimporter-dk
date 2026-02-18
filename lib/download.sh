@@ -28,7 +28,6 @@
 # SOFTWARE.
 ################################################################################
 
-
 # Prevent direct execution
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "This script should be sourced, not executed directly."
