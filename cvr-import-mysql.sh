@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 ################################################################################
-# CVR Data Unzip Script
+# CVR Data Import Script - Direct MySQL Method
 #
-# Unzips previously downloaded CVR data files.
+# Imports CVR CSV files directly into MySQL using LOAD DATA.
+# Creates tables with dynamic schema based on CSV headers.
 #
 # Copyright (c) 2026 janich
 # Repository: https://github.com/janich/cvrimporter-dk
@@ -27,11 +28,10 @@
 # SOFTWARE.
 #
 # Usage:
-#   ./cvr-unzip-data.sh [options]
+#   ./cvr-import-mysql.sh [options]
 #
 # Options:
-#   --date YYYY-MM-DD   Unzip data from specific date folder (default: today)
-#   --source NAME       Unzip only a specific source (e.g., "Telefaxnummer")
+#   --source NAME       Import only a specific source (e.g., "Telefaxnummer")
 #   --dry-run           Show what would be done without executing
 #   --verbose           Enable verbose output
 #   --quiet             Disable most output
@@ -46,7 +46,7 @@ set -o pipefail
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_NAME="CVR Data Unzip"
+SCRIPT_NAME="CVR Import - MySQL Direct Method"
 
 # Load config file
 source "${SCRIPT_DIR}/cvr.conf" || {
@@ -60,8 +60,13 @@ source "${SCRIPT_DIR}/lib/common.sh" || {
     exit 1
 }
 
-source "${SCRIPT_DIR}/lib/unzip.sh" || {
-    echo "ERROR: Failed to load unzip functions from ${SCRIPT_DIR}/lib/unzip.sh"
+source "${SCRIPT_DIR}/lib/import.sh" || {
+    echo "ERROR: Failed to load import functions from ${SCRIPT_DIR}/lib/import.sh"
+    exit 1
+}
+
+source "${SCRIPT_DIR}/lib/import-mysql.sh" || {
+    echo "ERROR: Failed to load MySQL import functions from ${SCRIPT_DIR}/lib/import-mysql.sh"
     exit 1
 }
 
@@ -71,10 +76,12 @@ source "${SCRIPT_DIR}/lib/unzip.sh" || {
 
 DRY_RUN=false
 SINGLE_SOURCE=""
+NO_OVERRIDES=false
 
-# Derived paths
-DOWNLOAD_DIR=""
-UNZIP_DIR=""
+# CSV parsing configuration
+CSV_DELIMITER="${CVR_CSV_DELIMITER:-,}"
+CSV_ENCLOSURE="${CVR_CSV_ENCLOSURE:-\"}"
+CSV_LINE_TERMINATOR="${CVR_CSV_LINE_TERMINATOR:-\\n}"
 
 # =============================================================================
 # HELP
@@ -84,35 +91,43 @@ show_help() {
     cat << EOF
 $SCRIPT_NAME
 
-Unzips previously downloaded CVR data files.
+Imports CVR CSV files directly into MySQL using LOAD DATA command.
 
 Usage: $(basename "$0") [options]
 
 Options:
-    --date YYYY-MM-DD   Unzip data from specific date folder (default: today)
-    --source NAME       Unzip only a specific source (e.g., "Telefaxnummer")
+    --source NAME       Import only a specific source (e.g., "Telefaxnummer")
     --dry-run           Show what would be done without executing
     --verbose           Enable verbose output
     --quiet             Disable most output
     --help              Show this help message
 
 Environment variables:
-    CVR_DATA_DIR                Base data directory (default: ./data)
+    CVR_DATA_DIR                Base data directory
+    CVR_DB_HOST                 Database host
+    CVR_DB_PORT                 Database port
+    CVR_DB_NAME                 Database name
+    CVR_DB_USER                 Database user
+    CVR_DB_PASS                 Database password
+    CVR_DB_PREFIX               Table prefix for imports (default: cvr_import_)
+    CVR_CSV_DELIMITER           CSV field delimiter (default: ,)
+    CVR_CSV_ENCLOSURE           CSV field enclosure (default: ")
+    CVR_CSV_LINE_TERMINATOR     CSV field line termination (default: \n)
     CVR_LOG_DIR                 Log directory (default: ./logs)
     CVR_VERBOSE                 Enable verbose output
 
 Examples:
-    # Unzip today's downloaded data
+    # Import today's data
     ./$(basename "$0")
 
-    # Unzip data from specific date folder
-    ./$(basename "$0") --date 2026-02-16
-
-    # Unzip only Telefaxnummer
+    # Import only Telefaxnummer data
     ./$(basename "$0") --source Telefaxnummer
 
     # Dry run to see what would happen
     ./$(basename "$0") --dry-run
+
+    # Import with verbose output
+    ./$(basename "$0") --verbose
 
 EOF
 }
@@ -125,20 +140,16 @@ EOF
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --date)
-                DATE_SUFFIX="$2"
-                shift 2
-                ;;
-            --date=*)
-                DATE_SUFFIX="${1#*=}"
-                shift
-                ;;
             --source)
                 SINGLE_SOURCE="$2"
                 shift 2
                 ;;
             --source=*)
                 SINGLE_SOURCE="${1#*=}"
+                shift
+                ;;
+            --no-overrides)
+                NO_OVERRIDES=true
                 shift
                 ;;
             --dry-run)
@@ -171,51 +182,35 @@ parse_args() {
 # =============================================================================
 
 main() {
-    # Parse arguments first
+    # Parse arguments
     parse_args "$@"
 
-    # Set derived paths after config is loaded
-    DOWNLOAD_DIR="${DATA_DIR}/${DATE_SUFFIX}"
-    UNZIP_DIR="$(get_unzip_dir "")"
+    # Initialize
+    init_import_script "$SCRIPT_NAME" "import-mysql"
 
-    # Set log file
-    LOG_FILE="${LOG_DIR}/unzip-${LOG_SUFFIX}.log"
-
-    # Validate date format
-    if ! validate_date_format "$DATE_SUFFIX"; then
-        log_error "Invalid date format: $DATE_SUFFIX (expected YYYY-MM-DD)"
-        exit 1
-    fi
-
-    # Check if download directory exists
-    if [[ ! -d "$DOWNLOAD_DIR" ]]; then
-        log_error "Download directory not found: $DOWNLOAD_DIR"
-        exit 1
-    fi
-
-    # Initialize logging
-    log_info "========================================"
-    log_info "$SCRIPT_NAME"
-    log_info "========================================"
-    log_info "Date:           $DATE_SUFFIX"
-    log_info "Download dir:   $DOWNLOAD_DIR"
-    log_info "Unzip dir:      $UNZIP_DIR"
-    log_info "Log file:       $LOG_FILE"
+    # Additional info for MySQL method
+    log_info "DB Host:        $DB_HOST:$DB_PORT"
+    log_info "DB Name:        $DB_NAME"
     log_info "========================================"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_warn "DRY RUN MODE - No actual operations will be performed"
-    fi
+    else
+        local mysql_check_output=$(execute_mysql "SELECT 1;" 2>&1)
 
-    # Ensure directories exist
-    ensure_directory "$UNZIP_DIR" || exit 1
-    ensure_directory "$LOG_DIR" || exit 1
+        local mysql_check_exit=$?
+        if [[ $mysql_check_exit -ne 0 ]]; then
+            log_error " --> MySQL connectivity failed: $mysql_check_output"
+            log_error ""
+            return 1
+        fi
+    fi
 
     log_info ""
 
     # Process statistics
     local total_sources=0
-    local unzipped=0
+    local imported=0
     local errors=0
     local script_start=$(date +%s)
 
@@ -231,32 +226,30 @@ main() {
         ((total_sources++))
 
         log_info "----------------------------------------"
-        log_info "Unzipping: $name"
+        log_info "Importing: $name"
 
-        local filename=$(build_filename "$name" "$version" "$url_part" "$download_type" "$file_type" "$data_type")
-        local zip_file="${DOWNLOAD_DIR}/${filename}"
+        # Get unzip directory
+        local unzip_dir=$(get_unzip_dir "$name")
 
-        # Check if zip file exists
-        if [[ ! -f "$zip_file" ]] && [[ "$DRY_RUN" != "true" ]]; then
-            log_warn "Zip file not found: $zip_file, skipping..."
-            log_warn "----------------------------------------"
-            log_warn ""
-
-            ((errors++))
-            continue
-        fi
-
-        # Unzip
-        unzip_file "$name" "$zip_file" || {
-            log_error "Unzip failed for $name, continuing to next..."
+        if [[ ! -d "$unzip_dir" ]]; then
+            log_error "Directory not found: $unzip_dir, skipping..."
             log_error "----------------------------------------"
             log_error ""
 
             ((errors++))
             continue
+        fi
+
+        # Import
+        import_csv_mysql "$name" "$unzip_dir" || {
+            log_warn "Import failed for $name, continuing to next..."
+            log_warn "----------------------------------------"
+            log_warn ""
+            ((errors++))
+            continue
         }
 
-        ((unzipped++))
+        ((imported++))
 
         log_info "----------------------------------------"
         log_info ""
@@ -269,10 +262,9 @@ main() {
     log_info "SUMMARY"
     log_info "========================================"
     log_info "Total sources:  $total_sources"
-    log_info "Unzipped:       $unzipped"
+    log_info "Imported:       $imported"
     log_info "Errors:         $errors"
     log_info "Total time:     $script_elapsed"
-    log_info "Log file:       $LOG_FILE"
     log_info "========================================"
 
     if [[ $errors -gt 0 ]]; then

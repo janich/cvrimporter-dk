@@ -120,7 +120,7 @@ Examples:
     # Download today's data
     ./$(basename "$0")
 
-    # Download only Telefonnummer
+    # Download only Telefaxnummer
     ./$(basename "$0") --source Telefaxnummer
 
     # Dry run to see what would happen
