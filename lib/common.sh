@@ -276,13 +276,13 @@ init_import_script() {
 # Provide per-table column type overrides in a simple key=value format.
 # Place files under: ${SCRIPT_DIR}/overrides/
 # File name candidates:
-#   - <full_table_name>.conf   (e.g. cvr_import_telefonnummer.conf)
-#   - <shortname>.conf         (e.g. telefonnummer.conf)
+#   - <full_table_name>.conf   (e.g. cvr_import_telefaxnummer.conf)
+#   - <shortname>.conf         (e.g. telefaxnummer.conf)
 #
 # File format (one mapping per line):
 #   sanitized_column_name=SQL_TYPE
 # Example:
-#   telefonnummer=VARCHAR(100) NULL
+#   telefaxnummer=VARCHAR(100) NULL
 #   antal_ansatte=INT NULL
 # =============================================================================
 get_column_override() {
