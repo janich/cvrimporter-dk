@@ -55,8 +55,12 @@ php_import_helper() {
         return 0
     fi
 
-    local php_tmp
-    php_tmp=$(mktemp /tmp/cvr_import_php.XXXXXX.php)
+    if [[ -f "/tmp/cvr_import_php.XXXXXX.php" ]]; then
+      rm -f /tmp/cvr_import_php.XXXXXX.php
+    fi
+
+    local php_tmp=$(mktemp /tmp/cvr_import_php.XXXXXX.php)
+
 
     # Generate PHP script inline
     cat > "$php_tmp" <<'PHPSCRIPT'
