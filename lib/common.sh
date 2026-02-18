@@ -54,7 +54,7 @@ DB_PREFIX="${CVR_DB_PREFIX:-import_}"
 
 # Logging Configuration
 LOG_DIR="${CVR_LOG_DIR:-$SCRIPT_DIR/logs}"
-LOG_SUFFIX="${CVR_LOG_SUFFIX:-$(date +%Y-%m-%d)}"
+LOG_SUFFIX="${CVR_LOG_SUFFIX:-$(date +%Y-%m)}"
 VERBOSE="${CVR_VERBOSE:-false}"
 
 # =============================================================================
