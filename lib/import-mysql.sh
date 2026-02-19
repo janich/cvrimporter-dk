@@ -170,11 +170,11 @@ import_csv_mysql() {
 
     for csv_file in "${csv_files[@]}"; do
         local csv_basename=$(basename "$csv_file")
-        log_debug " --> Processing: $csv_basename"
-
-        # Generate table name
         local table_name=$(generate_table_name "$name")
-        log_debug " --> Table name: $table_name"
+        local file_size=$(get_file_size "$csv_file")
+
+        log_debug " --> Processing: $csv_basename ($(human_readable_size $file_size)) -> table: $table_name"
+        log_info " --> Importing: $csv_basename ($(human_readable_size $file_size)) -> $table_name"
 
         # Parse CSV headers
         PARSED_COLUMNS=()
@@ -196,10 +196,10 @@ import_csv_mysql() {
         # Load data
         if load_csv_data "$table_name" "$csv_file" "${PARSED_COLUMNS[@]}"; then
             ((imported_count++))
-            log_info " --> Imported: $csv_basename -> $table_name"
+            log_info " --> Imported!"
         else
             ((error_count++))
-            log_warn " --> Failed to import: $csv_basename"
+            log_warn " --> Failed to import!"
         fi
     done
 

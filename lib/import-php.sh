@@ -327,15 +327,17 @@ import_csv_php() {
     for csv_file in "${csv_files[@]}"; do
         local csv_basename=$(basename "$csv_file")
         local table_name=$(generate_table_name "$name")
+        local file_size=$(get_file_size "$csv_file")
 
-        log_debug " --> Processing: $csv_basename -> table: $table_name"
+        log_debug " --> Processing: $csv_basename ($(human_readable_size $file_size)) -> table: $table_name"
+        log_info " --> Importing: $csv_basename ($(human_readable_size $file_size)) -> $table_name"
 
         if php_import_helper "$table_name" "$csv_file"; then
             ((imported_count++))
-            log_info " --> Imported: $csv_basename -> $table_name"
+            log_info " --> Imported!"
         else
             ((error_count++))
-            log_warn " --> Failed to import: $csv_basename"
+            log_warn " --> Failed to import!"
         fi
     done
 
