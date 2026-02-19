@@ -44,12 +44,14 @@ unzip_file() {
     local zip_file="$2"
     local output_dir=$(get_unzip_dir "$name")
 
-    log_debug "Source: $zip_file"
-    log_debug "To folder: $output_dir"
+    log_debug "Unzipping: "
+    log_debug " -- Source: $zip_file"
+    log_debug " -- To folder: $output_dir"
 
     # Check if zip file exists
     if [[ ! -f "$zip_file" ]]; then
-        log_error " --> Zip file not found: $zip_file"
+        log_error "Unzip: Zip file not found: $name"
+        log_error " --> Zip file: $zip_file"
         return 1
     fi
 
@@ -77,7 +79,9 @@ unzip_file() {
 
     # Unzip
     if ! unzip -o -q -d "$output_dir" "$zip_file" 2>/dev/null; then
-        log_error " --> Unzip failed for $name"
+        log_error "Unzip: Unzip failed for $name"
+        log_error " --> Zip file: $zip_file"
+        log_error " --> To path: $output_dir"
         rm -rf "$output_dir" 2>/dev/null || true
         return 1
     fi

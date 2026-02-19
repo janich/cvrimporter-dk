@@ -54,12 +54,12 @@ parse_csv_headers() {
     # Read first line to get headers
     local headers
     headers=$(head -n 1 "$csv_file" 2>/dev/null | tr -d '\r') || {
-        log_error "Cannot read headers from $csv_file"
+        log_debug "CSV: Cannot read headers from $csv_file"
         return 1
     }
 
     if [[ -z "$headers" ]]; then
-        log_error "Empty headers in $csv_file"
+        log_debug "CSV: Empty headers in $csv_file"
         return 1
     fi
 

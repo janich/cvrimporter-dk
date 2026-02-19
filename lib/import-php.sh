@@ -276,12 +276,22 @@ PHPSCRIPT
         unset OVERRIDE_DIR 2>/dev/null || true
     fi
 
-    # Execute PHP script
-    "$PHP_BIN" -d mysqli.allow_local_infile=1 "$php_tmp" "$table_name" "$csv_file"
+    # Execute PHP script and capture output
+    local php_output
+    local php_errors
+    php_output=$("$PHP_BIN" -d mysqli.allow_local_infile=1 "$php_tmp" "$table_name" "$csv_file" 2>&1)
     local rc=$?
+
+    # Log any output
+    if [[ -n "$php_output" ]]; then
+        log_debug "PHP output: $php_output"
+    fi
 
     if [[ $rc -ne 0 ]]; then
         log_error "PHP import failed for $csv_file -> rc=$rc"
+        if [[ -n "$php_output" ]]; then
+            log_error "PHP error output: $php_output"
+        fi
     fi
 
     rm -f "$php_tmp"
@@ -294,7 +304,12 @@ import_csv_php() {
     local csv_dir="$2"
 
     log_info "Importing (PHP): $name"
-    log_debug "Source directory: $csv_dir"
+
+    log_debug "Importing (PHP): $name"
+    log_debug " --> Source: $csv_dir"
+    log_debug " --> DB Host: $DB_HOST:$DB_PORT"
+    log_debug " --> DB Name: $DB_NAME"
+    log_debug " --> DB User: $DB_USER"
 
     # Find CSV files
     find_csv_files "$csv_dir"
@@ -312,6 +327,7 @@ import_csv_php() {
     for csv_file in "${csv_files[@]}"; do
         local csv_basename=$(basename "$csv_file")
         local table_name=$(generate_table_name "$name")
+
         log_debug " --> Processing: $csv_basename -> table: $table_name"
 
         if php_import_helper "$table_name" "$csv_file"; then

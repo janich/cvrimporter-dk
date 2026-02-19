@@ -246,7 +246,7 @@ main() {
 
         # Download
         download_file "$name" "$filename" "$timeout" || {
-            log_error "Download failed for $name, continuing to next..."
+            log_error "Download failed for $name ($filename), continuing to next..."
             log_error "----------------------------------------"
             log_error ""
 

@@ -102,6 +102,11 @@ log() {
     if [[ -n "$LOG_FILE" ]]; then
         echo "[$timestamp] [$level] $message" >> "$LOG_FILE" 2>/dev/null || true
     fi
+
+    # Write errors and warnings to separate error log
+    if [[ "$level" == "DEBUG" ]]; then
+        echo "[$timestamp] [$level] $message" >> "${LOG_DIR}/debug-${LOG_SUFFIX}.log" 2>/dev/null || true
+    fi
 }
 
 log_info()  { log "INFO" "$@"; }

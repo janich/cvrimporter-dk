@@ -63,8 +63,9 @@ download_file() {
 
     local url=$(build_download_url "$filename")
 
-    log_debug "From URL: ${API_BASE_URL}?Filename=${filename}&apikey=***"
-    log_debug "To file: $local_file"
+    log_debug "Downloading: "
+    log_debug " --> From URL: ${API_BASE_URL}?Filename=${filename}&apikey=***"
+    log_debug " --> To file: $local_file"
 
     # Check cache
     if file_exists_and_valid "$local_file" "$CACHE_THRESHOLD_BYTES"; then
@@ -94,7 +95,9 @@ download_file() {
         -H "Accept: application/octet-stream" \
         -o "$local_file" \
         "$url" 2>&1) || {
-        log_error " --> Download failed for $name (curl error)"
+        log_error "Download: Download failed for $name (curl error)"
+        log_error " --> Url: $url"
+        log_error " --> Settings: timeout=$timeout, connect timeout=$CURL_CONNECT_TIMEOUT"
 
         if file_exists_and_valid "$local_file" 100; then
                 local size=$(get_file_size "$local_file")
@@ -108,7 +111,9 @@ download_file() {
 
     # Check HTTP status
     if [[ "$http_code" != "200" ]]; then
-        log_error " --> Download failed for $name (HTTP $http_code)"
+        log_error "Download: Download failed for $name (HTTP $http_code)"
+        log_error " --> Url: $url"
+        log_error " --> Settings: timeout=$timeout, connect timeout=$CURL_CONNECT_TIMEOUT"
 
         if file_exists_and_valid "$local_file" 100; then
                 local size=$(get_file_size "$local_file")
@@ -127,7 +132,10 @@ download_file() {
         log_info " --> Downloaded: $(human_readable_size $size) in $elapsed"
         return 0
     else
-        log_error " --> Download incomplete or corrupted for $name"
+        log_error "Download: Download incomplete or corrupted for $name"
+        log_error " --> Url: $url"
+        log_error " --> Settings: timeout=$timeout, connect timeout=$CURL_CONNECT_TIMEOUT"
+
         rm -f "$local_file" 2>/dev/null || true
         return 1
     fi
